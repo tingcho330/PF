@@ -1,0 +1,82 @@
+import pandas as pd
+import networkx as nx
+import matplotlib.pyplot as plt
+
+# 엑셀 파일에서 데이터 읽기
+file_path = 'pf_example.xlsx'
+df = pd.read_excel(file_path)
+
+# 장비의 초기 상태를 모두 on으로 설정
+df['상태'] = 'on'
+
+# 장비 상태 변경 함수
+def change_equipment_status(equipment_name, new_status):
+    if new_status not in ['on', 'off']:
+        print("Invalid status. Please enter 'on' or 'off'.")
+        return
+    df.loc[df['장비 이름'] == equipment_name, '상태'] = new_status
+    print(f"Changed status of {equipment_name} to {new_status}.")
+
+# 그래프 생성 함수
+def create_graph(df):
+    G = nx.DiGraph()
+    for index, row in df[df['상태'] == 'on'].iterrows():
+        level = row['레벨']
+        equipment = row['장비 이름']
+        parent_equipments = row['부모 장비']
+        
+        G.add_node(equipment, level=level)
+        
+        if pd.notna(parent_equipments):
+            for parent_equipment in parent_equipments.split(','):
+                parent_equipment = parent_equipment.strip()
+                if df[df['장비 이름'] == parent_equipment]['상태'].values[0] == 'on':
+                    G.add_edge(parent_equipment, equipment)
+    return G
+
+# 최단 경로 찾기 함수
+def find_shortest_path(graph, start, end):
+    def dfs_paths(graph, start, goal):
+        stack = [(start, [start])]
+        while stack:
+            (vertex, path) = stack.pop()
+            for next in set(graph.neighbors(vertex)) - set(path):
+                if next == goal:
+                    yield path + [next]
+                else:
+                    stack.append((next, path + [next]))
+
+    try:
+        return next(dfs_paths(graph, start, end))
+    except StopIteration:
+        return None
+
+# 그래프 시각화 함수
+def visualize_graph(G, shortest_path=None):
+    pos = {node: (index, -data['level']) for index, (node, data) in enumerate(G.nodes(data=True))}
+    labels = {node: node for node in G.nodes()}
+
+    plt.figure(figsize=(12, 8))
+    nx.draw(G, pos, labels=labels, with_labels=True, node_size=3000, node_color='skyblue', font_size=10, font_weight='bold', edge_color='gray')
+    
+    if shortest_path:
+        path_edges = list(zip(shortest_path, shortest_path[1:]))
+        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='r', width=2)
+
+    plt.title("Equipment Hierarchy with Shortest Path Highlighted")
+    plt.show()
+
+# 초기 그래프 생성 및 시각화
+G = create_graph(df)
+visualize_graph(G)
+
+# 장비 상태 변경 예시
+change_equipment_status('Sub1', 'off')
+
+# 변경된 상태를 반영한 그래프 생성 및 최단 경로 찾기
+G = create_graph(df)
+shortest_path = find_shortest_path(G, 'Start_Equipment_Name', 'End_Equipment_Name')
+print("Shortest path using DFS:", shortest_path)
+
+# 변경된 상태를 반영한 그래프 시각화
+visualize_graph(G, shortest_path)
